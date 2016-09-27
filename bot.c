@@ -215,7 +215,8 @@ const char* find_match(const char *msg)
 	size_t i;
 	for(i = 0; i < matchlist.used; i++){
 		const struct Match *m = &matchlist.m_buf[i];
-		if(m->keyw[0] != '\0' && strstr(msg, m->keyw)){
+		if((m->keyw[0] != '\0' && strstr(msg, m->keyw)) || 
+			(m->keyw[0] == '\0' && msg[0] == '\0')){
 			return m->react[rand() % m->used];
 		}
 	}
@@ -382,7 +383,7 @@ int main()
 				if(time(NULL) - last_msg > 300){
 					const char *s = rand_msg_starter();
 					if(s != NULL){
-						strcat(curmsg, "\r\n");
+						strcat(s, "\r\n");
 						privmsg1(channel,s);
 					}
 					last_msg = time(NULL)+150;
