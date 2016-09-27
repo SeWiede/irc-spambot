@@ -229,7 +229,9 @@ char find_answer(char *msg, const char *user)
 	if(strstr(msg, "hello") || strstr(msg, "hi ") || strstr(msg, "hey ")){
 		if(strstr(msg, nick)){
 			greet(msg, user);
+			return;
 		}
+		msg[0] = '\0';
 		return;
 	}
 
