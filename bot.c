@@ -72,7 +72,7 @@ struct Match* alloc_match(const char *keyw)
 	return m;
 }
 
-int add_match(char *msg)
+int add_match(char *msg, const char *user)
 {
 	const char *keyw = strstr(msg, "<");
 	const char *react = strstr(keyw+1, "<");
@@ -98,7 +98,7 @@ int add_match(char *msg)
 	s = strdup(react);
 	assert(s != NULL);
 	m->react[m->used++] = s;
-	printf("added to match '%s' reaction '%s'\n", keyw, s);
+	privmsg(user, "added to match <%s> reaction: '%s'\r\n", keyw, s);
 	
 	return 1;
 }
@@ -109,10 +109,11 @@ void remove_match(struct Match *m)
 	for(i = 0; i < m->used; i++){
 		free((void*)m->react[i]);
 	}
-	memmove(m, m+1, &matchlist.m_buf[matchlist.used]-m-1);
+	memmove(m, m+1, (&matchlist.m_buf[matchlist.used]-m)*sizeof(struct Match));
+	matchlist.used--;
 }
 
-int del_match(char *msg)
+int del_match(char *msg, const char *user)
 {
 	const char *keyw = strstr(msg, "<");
 	const char *react = strstr(keyw+1, "<");
@@ -137,20 +138,38 @@ int del_match(char *msg)
 	if(react != NULL){
 		for(i = 0; i < m->used; i++){
 			if(strstr(m->react[i], react)){
+				privmsg(user, "removing reaction %i\r\n", i);
 				free((void*)m->react[i]);
-				memmove(&m->react[i], &m->react[i+1], m->used - i - 1);
+				memmove(&m->react[i], &m->react[i+1], (m->used - i)*sizeof(const char*));
 				i--;
 				m->used--;
 			}
 		}
 		if(m->used == 0){
 			remove_match(m);
+			privmsg1(user, "removed match completely\r\n");
 		}
 	}else{
 		remove_match(m);
+		privmsg1(user, "removed match completely\r\n");
 	}
-
 	return 1;
+}
+
+void drop_all_matches()
+{
+	struct Match *m;
+	size_t i,j;
+	for(i = 0; i < matchlist.used; i++){
+		m = &matchlist.m_buf[i];
+		for(j = 0; j < m->used; j++){
+			free((void*)m->react[j]);
+		}
+		free((void*)m->keyw);
+	}
+	free(matchlist.m_buf);
+	matchlist.m_buf = NULL;
+	matchlist.size = matchlist.used = 0;
 }
 
 int show_match(char *msg, const char *user)
@@ -185,6 +204,9 @@ int list_matches(char *msg, const char *user)
 		m = &matchlist.m_buf[i];
 		privmsg(user, "[%i] <%s> (%i reactions)\r\n",i,m->keyw,m->used);
 	}
+	if(matchlist.used == 0){
+		privmsg1(user, "<empty>\r\n");
+	}
 	return 1;
 }
 
@@ -204,13 +226,17 @@ void cmd_interpret(char *msg, const char *user)
 {
 	int error = 0;
 	if(strncmp(msg, "!add", 4) == 0){
-		error = add_match(msg+5);
+		error = add_match(msg+5, user);
 	}else if(strncmp(msg, "!del", 4) == 0){
-		error = del_match(msg+5);
+		error = del_match(msg+5, user);
 	}else if(strncmp(msg, "!show", 5) == 0){
 		error = show_match(msg+6, user);
 	}else if(strncmp(msg, "!list", 5) == 0){
 		error = list_matches(msg+6, user);
+	}else if(strncmp(msg, "!dropall", 8) == 0){
+		error = 1;
+		drop_all_matches();
+		privmsg1(user,"dropped everything\r\n");
 	}
 
 	if(error == 0){
