@@ -274,13 +274,8 @@ void str_lower(char *str){
 }
 void find_answer(char *msg, const char *user)
 {
-	
-	char tmpnick[GLOBAL_BUFSIZE];
-	strcpy(tmpnick, shortnick);
-	str_lower(msg);str_lower(tmpnick);
-	
 	if(strstr(msg, "hello") || strstr(msg, "hi ") || strstr(msg, "hey ")){
-		if(strstr(msg, tmpnick)){
+		if(strstr(msg, shortnick)){
 			greet(msg, user);
 			return;
 		}
@@ -327,7 +322,7 @@ int main(int argc, char* argv[])
 	short twitch = 0;
 	while(1){
 		static struct option opts[] = {
-			{"twtich", no_argument, 0, 't'} //, ...
+			{"twitch", no_argument, 0, 't'} //, ...
 			//...
 		};
 		int opt_index =0;
@@ -414,10 +409,11 @@ int main(int argc, char* argv[])
 					}
 				}
 				if(time(NULL) - last_msg > 300){
-					char s[GLOBAL_BUFSIZE];/*=*/strcpy(s, rand_msg_starter());
+					const char *s = rand_msg_starter();
 					if(s != NULL){
-						strcat(s, "\r\n");
-						privmsg1(channel,s);
+						strcpy(curmsg, s);
+						strcat(curmsg, "\r\n");
+						privmsg1(channel,curmsg);
 					}
 					last_msg = time(NULL)+150;
 				}
