@@ -7,7 +7,7 @@
 #include <netdb.h>
 #include <stdarg.h>
 
-#include "server.h"
+#include "server.local.h"
 
 int conn;
 char sbuf[512];
