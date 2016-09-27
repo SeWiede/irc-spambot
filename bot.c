@@ -9,19 +9,22 @@
 
 #include "server.local.h"
 
-int conn;
-char sbuf[512];
+#define GLOBAL_BUFSIZE 512
 
+int conn;
+char sbuf[GLOBAL_BUFSIZE];
 
 void raw(char *fmt, ...)
 {
 	va_list ap;
 	va_start(ap, fmt);
-	vsnprintf(sbuf, 512, fmt, ap);
+	vsnprintf(sbuf, GLOBAL_BUFSIZE, fmt, ap);
 	va_end(ap);
 	printf("<< %s", sbuf);
 	write(conn, sbuf, strlen(sbuf));
 }
+#define privmsg1(DST, STR)	raw(":%s!%s@%s.%s PRIVMSG %s :%s",nick,nick,nick,myhostname,DST,STR)
+#define privmsg(DST, STR, ...)	raw(":%s!%s@%s.%s PRIVMSG %s :" STR,nick,nick,nick,myhostname,DST,__VA_ARGS__)
 
 #define MATCH_REACT_MAX 10
 struct Match{
@@ -163,13 +166,24 @@ int show_match(char *msg, const char *user)
 	*s = '\0';
 
 	if((m = get_match(keyw)) == NULL){
-		raw(":%s!%s@%s.tmi.twitch.tv PRIVMSG %s :NOT FOUND\r\n",nick,nick,nick,user);
+		privmsg1(user, "NOT FOuND\r\n");
 		return 0;
 	}
 	
-	raw(":%s!%s@%s.tmi.twitch.tv PRIVMSG %s :KEYWORD '%s'\r\n",nick,nick,nick,user,m->keyw);
+	privmsg(user, "KEYWORD <%s>\r\n", m->keyw);
 	for(i = 0; i < m->used; i++){
-		raw(":%s!%s@%s.tmi.twitch.tv PRIVMSG %s :[%i] %s\r\n",nick,nick,nick,user,i,m->react[i]);
+		privmsg(user, "[%i] %s\r\n", i, m->react[i]);
+	}
+	return 1;
+}
+
+int list_matches(char *msg, const char *user)
+{
+	struct Match *m;
+	size_t i;
+	for(i = 0; i < matchlist.used; i++){
+		m = &matchlist.m_buf[i];
+		privmsg(user, "[%i] <%s> (%i reactions)\r\n",i,m->keyw,m->used);
 	}
 	return 1;
 }
@@ -179,7 +193,7 @@ const char* find_match(const char *msg)
 	size_t i;
 	for(i = 0; i < matchlist.used; i++){
 		const struct Match *m = &matchlist.m_buf[i];
-		if(strstr(msg, m->keyw)){
+		if(m->keyw[0] != '\0' && strstr(msg, m->keyw)){
 			return m->react[rand() % m->used];
 		}
 	}
@@ -188,12 +202,19 @@ const char* find_match(const char *msg)
 
 void cmd_interpret(char *msg, const char *user)
 {
+	int error = 0;
 	if(strncmp(msg, "!add", 4) == 0){
-		add_match(msg+5);
+		error = add_match(msg+5);
 	}else if(strncmp(msg, "!del", 4) == 0){
-		del_match(msg+5);
+		error = del_match(msg+5);
 	}else if(strncmp(msg, "!show", 5) == 0){
-		show_match(msg+6, user);
+		error = show_match(msg+6, user);
+	}else if(strncmp(msg, "!list", 5) == 0){
+		error = list_matches(msg+6, user);
+	}
+
+	if(error == 0){
+		privmsg1(user,"error!\r\n");
 	}
 }
 
@@ -247,11 +268,11 @@ char find_answer(char *msg, const char *user)
 
 int main()
 {
-	char curmsg[513];
+	char curmsg[GLOBAL_BUFSIZE+1];
 
 	char *user, *command, *where, *message, *sep, *target;
 	int i, j, l, sl, o = -1, start, wordcount;
-	char buf[513];
+	char buf[GLOBAL_BUFSIZE+1];
 	struct addrinfo hints, *res;
 	time_t last_msg = time(NULL);
 
@@ -271,11 +292,11 @@ int main()
 	raw("USER %s 0 0 :%s\r\n", nick, nick);
 	raw("NICK %s\r\n", nick);
 
-	while ((sl = read(conn, sbuf, 512))) {
+	while ((sl = read(conn, sbuf, GLOBAL_BUFSIZE))) {
 		for (i = 0; i < sl; i++) {
 			o++;
 			buf[o] = sbuf[i];
-			if ((i > 0 && sbuf[i] == '\n' && sbuf[i - 1] == '\r') || o == 512) {
+			if ((i > 0 && sbuf[i] == '\n' && sbuf[i - 1] == '\r') || o == GLOBAL_BUFSIZE) {
 				buf[o + 1] = '\0';
 				l = o;
 				o = -1;
@@ -318,13 +339,14 @@ int main()
 
 					if(strcmp(command, "PRIVMSG") == 0){
 						strcpy(curmsg, message);
-						curmsg[512] = '\0';
+						curmsg[GLOBAL_BUFSIZE] = '\0';
 						if(curmsg[0] == '!'){
 							cmd_interpret(curmsg, user);
 						}else{
 							find_answer(curmsg, user);
 							if(curmsg[0] != '\0'){
-								raw(":%s!%s@%s.tmi.twitch.tv PRIVMSG %s :%s\r\n",nick,nick,nick,channel,curmsg);
+								strcat(curmsg, "\r\n");
+								privmsg1(channel,curmsg);
 							}
 						}
 
@@ -334,7 +356,8 @@ int main()
 				if(time(NULL) - last_msg > 300){
 					const char *s = rand_msg_starter();
 					if(s != NULL){
-						raw(":%s!%s@%s.tmi.twitch.tv PRIVMSG %s :%s\r\n",nick,nick,nick,channel,s);
+						strcat(curmsg, "\r\n");
+						privmsg1(channel,s);
 					}
 					last_msg = time(NULL)+150;
 				}
