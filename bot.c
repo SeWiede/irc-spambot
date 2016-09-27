@@ -6,6 +6,8 @@
 #include <string.h>
 #include <netdb.h>
 #include <stdarg.h>
+#include <getopt.h>
+#include <time.h>
 
 #include "server.local.h"
 
@@ -75,14 +77,13 @@ struct Match* alloc_match(const char *keyw)
 int add_match(char *msg, const char *user)
 {
 	const char *keyw = strstr(msg, "<");
+	if(keyw == NULL) return 0;
 	const char *react = strstr(keyw+1, "<");
+	if(react == NULL) return 0;
 	char *s;
 	struct Match *m;
-	if(keyw == NULL) return 0;
-	if(react == NULL) return 0;
 	++keyw;
 	++react;
-	
 	s = strstr(keyw, ">");
 	if(s == NULL) return 0;
 	*s = '\0';
@@ -265,17 +266,21 @@ void greet(char *msg, const char *user)
 	}
 	strcat(msg, "!");
 }
-
-char find_answer(char *msg, const char *user)
-{
+void str_lower(char *str){
 	char *c;
-	int i, count, r, z;
-
-	for(c = msg; *c != '\0'; c++){
+	for(c = str; *c != '\0'; c++){
 		*c = *c <= 127 ? tolower(*c) : *c;
 	}
+}
+void find_answer(char *msg, const char *user)
+{
+	
+	char tmpnick[GLOBAL_BUFSIZE];
+	strcpy(tmpnick, shortnick);
+	str_lower(msg);str_lower(tmpnick);
+	
 	if(strstr(msg, "hello") || strstr(msg, "hi ") || strstr(msg, "hey ")){
-		if(strstr(msg, nick)){
+		if(strstr(msg, tmpnick)){
 			greet(msg, user);
 			return;
 		}
@@ -293,7 +298,7 @@ char find_answer(char *msg, const char *user)
 	msg[0] = '\0';
 }
 
-int main()
+int main(int argc, char* argv[])
 {
 	char curmsg[GLOBAL_BUFSIZE+1];
 
@@ -311,13 +316,42 @@ int main()
 	memset(&hints, 0, sizeof hints);
 	hints.ai_family = AF_INET;
 	hints.ai_socktype = SOCK_STREAM;
+	printf("getting data from: %s port %s\n", host, port);
 	getaddrinfo(host, port, &hints, &res);
+	printf("creating socket....\n");
 	conn = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+	printf("connecting...\n");
 	connect(conn, res->ai_addr, res->ai_addrlen);
+	printf("done!\n");
+	printf("checking arguments for connection: ...\n");
+	short twitch = 0;
+	while(1){
+		static struct option opts[] = {
+			{"twtich", no_argument, 0, 't'} //, ...
+			//...
+		};
+		int opt_index =0;
+		char c = getopt_long(argc, argv, "t", opts, &opt_index);
+		if(c==-1)
+			break;
+		switch(c) {
+		case 't':
+			twitch =1;	
+			break;
+		default:
+			break;
+		}
+	}
 
-	/* raw("PASS oauth:...\r\n"); */  /* <- twitch */
-	raw("USER %s 0 0 :%s\r\n", nick, nick);
-	raw("NICK %s\r\n", nick);
+	if(twitch){
+		printf("twitch was chosen!\n");
+		raw("PASS %s\r\n", auth);  /* <- twitch */
+		raw("NICK %s\r\n", nick);	
+	}else{
+		printf("default\n");
+		raw("USER %s 0 0 :%s\r\n", nick, nick);
+		raw("NICK %s\r\n", nick);
+	}
 
 	while ((sl = read(conn, sbuf, GLOBAL_BUFSIZE))) {
 		for (i = 0; i < sl; i++) {
@@ -376,12 +410,11 @@ int main()
 								privmsg1(channel,curmsg);
 							}
 						}
-
 						last_msg = time(NULL);
-					}		
+					}
 				}
 				if(time(NULL) - last_msg > 300){
-					const char *s = rand_msg_starter();
+					char s[GLOBAL_BUFSIZE];/*=*/strcpy(s, rand_msg_starter());
 					if(s != NULL){
 						strcat(s, "\r\n");
 						privmsg1(channel,s);
