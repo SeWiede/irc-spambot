@@ -151,13 +151,13 @@ int del_match(char *msg, const struct MsgInfo *const info)
 	char *keyw = strstr(msg, "<");
 	if(keyw == NULL) return 0;
 	char *react = strstr(keyw+1, "<");
-	if(react == NULL) return 0; 
 	
 	char *s;
 	struct Match *m;
 	size_t i;
 	++keyw;
-	++react;	
+	if(react != NULL) ++react;
+
 	s = strstr(keyw, ">");
 	if(s == NULL) return 0;
 	*s = '\0';
