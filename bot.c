@@ -33,8 +33,7 @@ void raw(char *fmt, ...)
 }
 void privmsg(const struct MsgInfo *const info, const char *fmt, ...)
 {
-	static const char PRIVMSG_FMT[] = ":%s!%s@%s.%s PRIVMSG %s :";
-	static const char PRIVMSG_TWITCH_W_FMT[] = ":%s!%s@%s.%s PRIVMSG %s :/w %s ";
+	char PRIVMSG_FMT[32] = ":%s!%s@%s.%s PRIVMSG %s :";
 
 	va_list ap;
 	char cfmt[GLOBAL_BUFSIZE];
@@ -43,7 +42,8 @@ void privmsg(const struct MsgInfo *const info, const char *fmt, ...)
 
 	if(info->user != NULL && twitch){
 		/* we send a twitch whisper */
-		snprintf(cfmt, GLOBAL_BUFSIZE, PRIVMSG_TWITCH_W_FMT, nick, nick, nick, myhostname, info->channel, info->user);
+		strcat(PRIVMSG_FMT, "/w %s ");
+		snprintf(cfmt, GLOBAL_BUFSIZE, PRIVMSG_FMT, nick, nick, nick, myhostname, info->channel, info->user);
 	}else{
 		/* normal IRC message */
 		const char *dst = info->channel;
@@ -110,6 +110,7 @@ int add_match(char *msg, const struct MsgInfo *const info)
 	if(keyw == NULL) return 0;
 	char *react = strstr(keyw+1, "<");
 	if(react == NULL) return 0;
+
 	char *s;
 	struct Match *m;
 	++keyw;
@@ -148,14 +149,15 @@ void remove_match(struct Match *m)
 int del_match(char *msg, const struct MsgInfo *const info)
 {
 	char *keyw = strstr(msg, "<");
+	if(keyw == NULL) return 0;
 	char *react = strstr(keyw+1, "<");
+	if(react == NULL) return 0; 
+	
 	char *s;
 	struct Match *m;
 	size_t i;
-	if(keyw == NULL) return 0;
 	++keyw;
-	if(react != NULL) ++react;
-	
+	++react;	
 	s = strstr(keyw, ">");
 	if(s == NULL) return 0;
 	*s = '\0';
@@ -420,6 +422,10 @@ int main(int argc, char* argv[])
 
 					if (!strncmp(command, "001", 3) && channel != NULL) {
 						raw("JOIN %s\r\n", channel);
+						if(twitch){
+							raw("CAP REQ :twitch.tv/membership\n");
+							raw("CAP REQ :twitch.tv/commands\n");	
+						}
 					} else if (!strncmp(command, "PRIVMSG", 7) || !strncmp(command, "NOTICE", 6)) {
 						if (where == NULL || message == NULL) continue;
 						if ((sep = strchr(user, '!')) != NULL) user[sep - user] = '\0';
