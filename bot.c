@@ -261,6 +261,19 @@ const char* find_match(const char *msg)
 void cmd_interpret(char *msg, const struct MsgInfo *const info)
 {
 	int error = 0;
+
+#ifndef NO_ADMIN
+	static const char *admin_user = NULL;
+	if(admin_user != NULL && strcmp(info->user, admin_user) != 0){
+		return;
+	}
+	if(strncmp(msg,"!admin",6) == 0){
+		admin_user = strdup(info->user);
+		privmsg(info, "you're admin!\r\n");
+		return;
+	}
+#endif
+
 	if(strncmp(msg, "!add", 4) == 0){
 		error = add_match(msg+5, info);
 	}else if(strncmp(msg, "!del", 4) == 0){
