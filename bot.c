@@ -9,24 +9,54 @@
 #include <getopt.h>
 #include <time.h>
 
+#include "bot.h"
 #include "server.local.h"
 
 #define GLOBAL_BUFSIZE 512
 
 int conn;
+int twitch = 0;
 char sbuf[GLOBAL_BUFSIZE];
 
+void vraw(char *fmt, va_list ap)
+{
+	vsnprintf(sbuf, GLOBAL_BUFSIZE, fmt, ap);
+	printf("<< %s", sbuf);
+	write(conn, sbuf, strlen(sbuf));
+}
 void raw(char *fmt, ...)
 {
 	va_list ap;
 	va_start(ap, fmt);
-	vsnprintf(sbuf, GLOBAL_BUFSIZE, fmt, ap);
+	vraw(fmt, ap);
 	va_end(ap);
-	printf("<< %s", sbuf);
-	write(conn, sbuf, strlen(sbuf));
 }
-#define privmsg1(DST, STR)	raw(":%s!%s@%s.%s PRIVMSG %s :%s",nick,nick,nick,myhostname,DST,STR)
-#define privmsg(DST, STR, ...)	raw(":%s!%s@%s.%s PRIVMSG %s :" STR,nick,nick,nick,myhostname,DST,__VA_ARGS__)
+void privmsg(const struct MsgInfo *const info, const char *fmt, ...)
+{
+	static const char PRIVMSG_FMT[] = ":%s!%s@%s.%s PRIVMSG %s :";
+	static const char PRIVMSG_TWITCH_W_FMT[] = ":%s!%s@%s.%s PRIVMSG %s :/w %s ";
+
+	va_list ap;
+	char cfmt[GLOBAL_BUFSIZE];
+
+	assert(channel != NULL);
+
+	if(info->user != NULL && twitch){
+		/* we send a twitch whisper */
+		snprintf(cfmt, GLOBAL_BUFSIZE, PRIVMSG_TWITCH_W_FMT, nick, nick, nick, myhostname, info->channel, info->user);
+	}else{
+		/* normal IRC message */
+		const char *dst = info->channel;
+		if(info->user != NULL) dst = info->user;
+		snprintf(cfmt, GLOBAL_BUFSIZE, PRIVMSG_FMT, nick, nick, nick, myhostname, dst);
+	}
+
+	strncat(cfmt, fmt, GLOBAL_BUFSIZE - strlen(sbuf) - 1);
+
+	va_start(ap, fmt);
+	vraw(cfmt, ap);
+	va_end(ap);
+}
 
 #define MATCH_REACT_MAX 10
 struct Match{
@@ -74,11 +104,11 @@ struct Match* alloc_match(const char *keyw)
 	return m;
 }
 
-int add_match(char *msg, const char *user)
+int add_match(char *msg, const struct MsgInfo *const info)
 {
-	const char *keyw = strstr(msg, "<");
+	char *keyw = strstr(msg, "<");
 	if(keyw == NULL) return 0;
-	const char *react = strstr(keyw+1, "<");
+	char *react = strstr(keyw+1, "<");
 	if(react == NULL) return 0;
 	char *s;
 	struct Match *m;
@@ -91,6 +121,7 @@ int add_match(char *msg, const char *user)
 	if(s == NULL) return 0;
 	*s = '\0';
 
+	str_lower(keyw);
 	if((m = get_match(keyw))){
 		if(m->used >= MATCH_REACT_MAX) return 0;
 	}else{
@@ -99,7 +130,7 @@ int add_match(char *msg, const char *user)
 	s = strdup(react);
 	assert(s != NULL);
 	m->react[m->used++] = s;
-	privmsg(user, "added to match <%s> reaction: '%s'\r\n", keyw, s);
+	privmsg(info, "added to match <%s> reaction: '%s'\r\n", keyw, s);
 	
 	return 1;
 }
@@ -114,10 +145,10 @@ void remove_match(struct Match *m)
 	matchlist.used--;
 }
 
-int del_match(char *msg, const char *user)
+int del_match(char *msg, const struct MsgInfo *const info)
 {
-	const char *keyw = strstr(msg, "<");
-	const char *react = strstr(keyw+1, "<");
+	char *keyw = strstr(msg, "<");
+	char *react = strstr(keyw+1, "<");
 	char *s;
 	struct Match *m;
 	size_t i;
@@ -134,12 +165,13 @@ int del_match(char *msg, const char *user)
 		*s = '\0';
 	}
 
+	str_lower(keyw);
 	if((m = get_match(keyw)) == NULL) return 0;
 	
 	if(react != NULL){
 		for(i = 0; i < m->used; i++){
 			if(strstr(m->react[i], react)){
-				privmsg(user, "removing reaction %i\r\n", i);
+				privmsg(info, "removing reaction %i\r\n", i);
 				free((void*)m->react[i]);
 				memmove(&m->react[i], &m->react[i+1], (m->used - i)*sizeof(const char*));
 				i--;
@@ -148,11 +180,11 @@ int del_match(char *msg, const char *user)
 		}
 		if(m->used == 0){
 			remove_match(m);
-			privmsg1(user, "removed match completely\r\n");
+			privmsg(info, "removed match completely\r\n");
 		}
 	}else{
 		remove_match(m);
-		privmsg1(user, "removed match completely\r\n");
+		privmsg(info, "removed match completely\r\n");
 	}
 	return 1;
 }
@@ -173,7 +205,7 @@ void drop_all_matches()
 	matchlist.size = matchlist.used = 0;
 }
 
-int show_match(char *msg, const char *user)
+int show_match(char *msg, const struct MsgInfo *const info)
 {
 	const char *keyw = strstr(msg, "<");
 	struct Match *m;
@@ -186,27 +218,27 @@ int show_match(char *msg, const char *user)
 	*s = '\0';
 
 	if((m = get_match(keyw)) == NULL){
-		privmsg1(user, "NOT FOuND\r\n");
+		privmsg(info, "%s\r\n", "NOT FOuND");
 		return 0;
 	}
 	
-	privmsg(user, "KEYWORD <%s>\r\n", m->keyw);
+	privmsg(info, "KEYWORD <%s>\r\n", m->keyw);
 	for(i = 0; i < m->used; i++){
-		privmsg(user, "[%i] %s\r\n", i, m->react[i]);
+		privmsg(info, "[%i] %s\r\n", i, m->react[i]);
 	}
 	return 1;
 }
 
-int list_matches(char *msg, const char *user)
+int list_matches(char *msg, const struct MsgInfo *const info)
 {
 	struct Match *m;
 	size_t i;
 	for(i = 0; i < matchlist.used; i++){
 		m = &matchlist.m_buf[i];
-		privmsg(user, "[%i] <%s> (%i reactions)\r\n",i,m->keyw,m->used);
+		privmsg(info, "[%i] <%s> (%i reactions)\r\n",i,m->keyw,m->used);
 	}
 	if(matchlist.used == 0){
-		privmsg1(user, "<empty>\r\n");
+		privmsg(info, "<empty>\r\n");
 	}
 	return 1;
 }
@@ -224,25 +256,25 @@ const char* find_match(const char *msg)
 	return NULL;
 }
 
-void cmd_interpret(char *msg, const char *user)
+void cmd_interpret(char *msg, const struct MsgInfo *const info)
 {
 	int error = 0;
 	if(strncmp(msg, "!add", 4) == 0){
-		error = add_match(msg+5, user);
+		error = add_match(msg+5, info);
 	}else if(strncmp(msg, "!del", 4) == 0){
-		error = del_match(msg+5, user);
+		error = del_match(msg+5, info);
 	}else if(strncmp(msg, "!show", 5) == 0){
-		error = show_match(msg+6, user);
+		error = show_match(msg+6, info);
 	}else if(strncmp(msg, "!list", 5) == 0){
-		error = list_matches(msg+6, user);
+		error = list_matches(msg+6, info);
 	}else if(strncmp(msg, "!dropall", 8) == 0){
 		error = 1;
 		drop_all_matches();
-		privmsg1(user,"dropped everything\r\n");
+		privmsg(info, "dropped everything\r\n");
 	}
 
 	if(error == 0){
-		privmsg1(user,"error!\r\n");
+		privmsg(info, "error!\r\n");
 	}
 }
 
@@ -285,7 +317,6 @@ void find_answer(char *msg, const char *user)
 
 	const char *s = find_match(msg);
 	if(s != NULL){
-		printf("found '%s'\n", s);
 		strcpy(msg, s);
 		return;
 	}
@@ -302,6 +333,10 @@ int main(int argc, char* argv[])
 	char buf[GLOBAL_BUFSIZE+1];
 	struct addrinfo hints, *res;
 	time_t last_msg = time(NULL);
+	struct MsgInfo msg_info= {
+		.channel = channel,
+		.user = NULL
+	};
 
 	matchlist.size = 4096;
 	matchlist.used = 0;
@@ -319,7 +354,6 @@ int main(int argc, char* argv[])
 	connect(conn, res->ai_addr, res->ai_addrlen);
 	printf("done!\n");
 	printf("checking arguments for connection: ...\n");
-	short twitch = 0;
 	while(1){
 		static struct option opts[] = {
 			{"twitch", no_argument, 0, 't'} //, ...
@@ -397,12 +431,14 @@ int main(int argc, char* argv[])
 						strcpy(curmsg, message);
 						curmsg[GLOBAL_BUFSIZE] = '\0';
 						if(curmsg[0] == '!'){
-							cmd_interpret(curmsg, user);
+							msg_info.user = user;
+							cmd_interpret(curmsg, &msg_info);
 						}else{
 							find_answer(curmsg, user);
 							if(curmsg[0] != '\0'){
 								strcat(curmsg, "\r\n");
-								privmsg1(channel,curmsg);
+								msg_info.user = NULL;
+								privmsg(&msg_info, "%s", curmsg);
 							}
 						}
 						last_msg = time(NULL);
@@ -413,7 +449,8 @@ int main(int argc, char* argv[])
 					if(s != NULL){
 						strcpy(curmsg, s);
 						strcat(curmsg, "\r\n");
-						privmsg1(channel,curmsg);
+						msg_info.user = NULL;
+						privmsg(&msg_info, "%s", curmsg);
 					}
 					last_msg = time(NULL)+150;
 				}
