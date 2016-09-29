@@ -9,6 +9,7 @@
 #include <getopt.h>
 #include <time.h>
 #include <signal.h>
+#include <errno.h>
 
 #include "bot.h"
 #include "server.local.h"
@@ -359,8 +360,11 @@ void load_from_file(void)
 		return;
 	}
 	if( (file = fopen(addLog, "r")) == NULL){
-		printf("error opening File %s\n", addLog);
-		return;
+		if( !(errno == 2 && ((file = fopen(addLog, "w")) != NULL)) ){ //cant find defined name of this errno
+			printf("error opening File %s\n", addLog);
+			return; 
+		}
+		return; //file just created! 
 	}
 	while(fgets(line, GLOBAL_BUFSIZE, file) != NULL){
 
