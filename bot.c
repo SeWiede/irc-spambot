@@ -8,16 +8,26 @@
 #include <stdarg.h>
 #include <getopt.h>
 #include <time.h>
+#include <signal.h>
 
 #include "bot.h"
 #include "server.local.h"
 
 #define GLOBAL_BUFSIZE 512
 
+#define COUNT_OF(x) (sizeof(x)/sizeof(x[0]))
+
 int conn;
 int twitch = 0;
+FILE *addLogFile;
 char sbuf[GLOBAL_BUFSIZE];
+volatile static int quit = 0;
 
+
+static void signal_handler(int sig)
+{
+	quit=1;
+}
 void vraw(char *fmt, va_list ap)
 {
 	vsnprintf(sbuf, GLOBAL_BUFSIZE, fmt, ap);
@@ -100,11 +110,10 @@ struct Match* alloc_match(const char *keyw)
 	m->keyw = strdup(keyw);
 	assert(m->keyw != NULL);
 	m->used = 0;
-	
 	return m;
 }
 
-int add_match(char *msg, const struct MsgInfo *const info)
+int add_match(char *msg, const struct MsgInfo *const info, short addFromFile)
 {
 	char *keyw = strstr(msg, "<");
 	if(keyw == NULL) return 0;
@@ -131,7 +140,8 @@ int add_match(char *msg, const struct MsgInfo *const info)
 	s = strdup(react);
 	assert(s != NULL);
 	m->react[m->used++] = s;
-	privmsg(info, "added to match <%s> reaction: '%s'\r\n", keyw, s);
+	if(!addFromFile)
+		privmsg(info, "added to match <%s> reaction: '%s'\r\n", keyw, s);
 	
 	return 1;
 }
@@ -275,7 +285,7 @@ void cmd_interpret(char *msg, const struct MsgInfo *const info)
 #endif
 
 	if(strncmp(msg, "!add", 4) == 0){
-		error = add_match(msg+5, info);
+		error = add_match(msg+5, info, 0);
 	}else if(strncmp(msg, "!del", 4) == 0){
 		error = del_match(msg+5, info);
 	}else if(strncmp(msg, "!show", 5) == 0){
@@ -341,8 +351,24 @@ void find_answer(char *msg, const char *user)
 
 int main(int argc, char* argv[])
 {
-	char curmsg[GLOBAL_BUFSIZE+1];
+	const int signals[] = {SIGINT, SIGTERM};
+	struct sigaction s;
+	s.sa_handler = signal_handler;
+	s.sa_flags = 0;
 
+	if(sigfillset(&s.sa_mask) < 0){
+		printf("error sigfillset\n");
+		exit(1);
+	}	
+
+	for(int i=0; i < COUNT_OF(signals); i++){
+		if(sigaction(signals[i], &s, NULL) < 0){
+			printf("error sigaction!\n");
+			exit(1);
+		}
+	}	
+
+	char curmsg[GLOBAL_BUFSIZE+1];
 	char *user, *command, *where, *message, *sep, *target;
 	int i, j, l, sl, o = -1, start, wordcount;
 	char buf[GLOBAL_BUFSIZE+1];
@@ -353,10 +379,32 @@ int main(int argc, char* argv[])
 		.user = NULL
 	};
 
+
 	matchlist.size = 4096;
 	matchlist.used = 0;
 	matchlist.m_buf = calloc(sizeof(struct Match), matchlist.size);
 	assert(matchlist.m_buf != NULL);
+
+	if( (addLogFile = fopen(addLog, "r")) == NULL){
+		printf("error opening File %s\n", addLog);	
+	}else{
+		while(fgets(curmsg, GLOBAL_BUFSIZE, addLogFile) != NULL){
+			int lastpos = strlen(curmsg)-1;
+			if(curmsg[lastpos] == '\n' || curmsg[lastpos] == '\0')
+				curmsg[lastpos] = '\0';
+			else{
+				printf("come on you shit! I dont want to deal with that - file ignored!\n");
+				addLogFile = NULL;
+				break;
+			}
+			char tmpmsg[GLOBAL_BUFSIZE]; strcpy(tmpmsg, curmsg);
+			if(add_match(tmpmsg, &msg_info, 1)){
+				printf("%s successfully added to commands\n", curmsg);
+			}else{
+				printf("error while adding %s to commands\n", curmsg);
+			}
+		}
+	}
 
 	memset(&hints, 0, sizeof hints);
 	hints.ai_family = AF_INET;
@@ -397,7 +445,7 @@ int main(int argc, char* argv[])
 		raw("NICK %s\r\n", nick);
 	}
 
-	while ((sl = read(conn, sbuf, GLOBAL_BUFSIZE))) {
+	while (!quit && (sl = read(conn, sbuf, GLOBAL_BUFSIZE))) {
 		for (i = 0; i < sl; i++) {
 			o++;
 			buf[o] = sbuf[i];
@@ -463,6 +511,7 @@ int main(int argc, char* argv[])
 						last_msg = time(NULL);
 					}
 				}
+
 				if(time(NULL) - last_msg > 300){
 					const char *s = rand_msg_starter();
 					if(s != NULL){
@@ -478,6 +527,30 @@ int main(int argc, char* argv[])
 		}
 
 	}
-
+	if(addLogFile != NULL){
+		printf("saving used commands in file %s\n", addLog);
+		if( (addLogFile = freopen(addLog, "w", addLogFile)) == NULL){
+			printf("could not reopen %s for writing\n", addLog);
+			exit(1);
+		}
+		for(int i=0; i < matchlist.used; i++){
+			for(int j=0 ;j<matchlist.m_buf[i].used ;j++){
+				const char* tmp = "!add <> <>\n";
+				if(fwrite(tmp, sizeof(char), 6, addLogFile) < 0
+				|| fwrite(matchlist.m_buf[i].keyw, sizeof(char), 
+									strlen(matchlist.m_buf[i].keyw), addLogFile) < 0
+				|| fwrite(tmp+6, sizeof(char), 3, addLogFile) < 0
+				|| fwrite(matchlist.m_buf[i].react[j], sizeof(char), 
+									strlen(matchlist.m_buf[i].react[j]), addLogFile) < 0
+				|| fwrite(tmp+9, sizeof(char), 2, addLogFile) < 0
+				  )
+				{
+					printf("could not write %s with reaction %s into file %s\n",
+									 matchlist.m_buf[i].keyw, matchlist.m_buf[i].react[j],addLog);
+				}
+			}	
+		}	
+	}
+	printf("BYE :) \n");
 	return 0;
 }
