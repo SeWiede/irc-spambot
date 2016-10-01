@@ -4,6 +4,7 @@
 
 #ifndef NO_ADMIN
 
+#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -25,33 +26,31 @@ static int find_admin_str_pos(const char *name)
 
 int add_admin(char *msg, const struct MsgInfo *const info)
 {
-	msg[strlen(msg) -2] = '\0'; // \r\n
-	if(msg == NULL || strlen(msg) < 1){
-		return 1;
+	char *name = skip_whitespace(msg);
+	cut_token(name);
+
+	if(name[0] == '\0'){
+		return 0;
 	}
-	if(is_admin(msg)){
-		privmsg(info, "%s already has command permission\r\n", msg);
-		return 1;
-	}
-	if(strstr(msg, " ") != NULL){
-		privmsg(info, "just write the name after the !admin command without other chars\r\n");
+	if(is_admin(name)){
+		privmsg(info, "%s already has command permission\r\n", name);
 		return 1;
 	}
 	admin_str = (char **)realloc(admin_str, (++admin_num)* sizeof(char*));
 	if(admin_str == NULL){
 		exit(1);
 	}
-	admin_str[admin_num-1] = strdup(msg);
+	admin_str[admin_num-1] = strdup(name);
 	if(admin_str[admin_num-1] == NULL){
 		exit(1);
 	}
 
-	privmsg(info, "%s is now an admin!\r\n", msg);
+	privmsg(info, "%s is now an admin!\r\n", name);
 
 	struct MsgInfo tmpinfo = *info;
-	tmpinfo.user = msg;
+	tmpinfo.user = name;
 
-	privmsg(&tmpinfo, "you're now permitted to command me!\r\n", msg);
+	privmsg(&tmpinfo, "you're now permitted to command me!\r\n");
 
 	return 1;
 }
@@ -81,17 +80,18 @@ int del_admin(char *msg, const struct MsgInfo *const info)
 		return 1;
 	}
 	if(admin_num == 1){
+		/* name is the last admin */
 		admin_num =0;
+		free(admin_str[0]);
 		free(admin_str);
 		admin_str = NULL;
 		return 1;
 	}
-	if(strstr(name, " ") != NULL){
-		privmsg(info, "just write the name after the !admin command without other chars\r\n");
-		return 1;
-	}
 
 	int pos = find_admin_str_pos(name);
+	assert(pos >= 0); /* we checked that some lines above with is_admin */
+
+
 	memmove(&admin_str[pos], &admin_str[pos+1], sizeof(char*)*(admin_num - pos - 1));
 	admin_str = (char**) realloc(admin_str, (--admin_num) * sizeof(char*));
 	if(admin_str == NULL){
