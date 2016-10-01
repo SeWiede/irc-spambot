@@ -13,7 +13,8 @@
 #include "bot.h"
 #include "server.local.h"
 
-#define GLOBAL_BUFSIZE 512
+#define GLOBAL_BUFSIZE (512)
+#define MATCH_REACT_MAX (10)
 
 #define COUNT_OF(x) (sizeof(x)/sizeof(x[0]))
 
@@ -21,7 +22,36 @@ int conn;
 int twitch = 0;
 char sbuf[GLOBAL_BUFSIZE];
 volatile static int quit = 0;
+static char **admin_str = NULL;
+static int admin_num = 0;
 
+
+struct Match{
+	const char *keyw;
+	const char *react[MATCH_REACT_MAX];
+	size_t used;
+};
+
+struct{
+	struct Match *m_buf;
+	size_t used, size;
+} matchlist = {
+	.m_buf = NULL,
+	.used = 0,
+	.size = 0
+};
+
+void free_resources(void){
+	if(admin_str != NULL){
+		for(int i = 0; i < admin_num; i++){
+			free(admin_str[i]);
+		}
+		free(admin_str);
+	}
+	if(matchlist.m_buf != NULL){
+		free(matchlist.m_buf);
+	}
+}
 
 static void signal_handler(int sig)
 {
@@ -66,22 +96,6 @@ void privmsg(const struct MsgInfo *const info, const char *fmt, ...)
 	vraw(cfmt, ap);
 	va_end(ap);
 }
-
-#define MATCH_REACT_MAX 10
-struct Match{
-	const char *keyw;
-	const char *react[MATCH_REACT_MAX];
-	size_t used;
-};
-
-struct{
-	struct Match *m_buf;
-	size_t used, size;
-} matchlist = {
-	.m_buf = NULL,
-	.used = 0,
-	.size = 0
-};
 
 struct Match* get_match(const char *keyw)
 {
@@ -268,18 +282,115 @@ const char* find_match(const char *msg)
 	return NULL;
 }
 
+int check_for_admin(const char *name){
+	for(int i=0 ;i < admin_num ;i++){
+		if(strcmp(name, admin_str[i]) == 0)
+			return 1;
+	}
+	return 0;
+}
+
+int add_admin(char *msg, const struct MsgInfo *const info)
+{
+	msg[strlen(msg) -2] = '\0'; // \r\n
+	if(msg == NULL || strlen(msg) < 1){
+		return 1;
+	}
+	if(check_for_admin(msg)){
+		privmsg(info, "%s already has command permission\r\n", msg);
+		return 1;
+	}
+	if(strstr(msg, " ") != NULL){
+		privmsg(info, "just write the name after the !admin command without other chars\r\n");
+		return 1;
+	}
+	admin_str = (char **)realloc(admin_str, (++admin_num)* sizeof(char*));
+	if(admin_str == NULL){
+		exit(1);
+	}
+	admin_str[admin_num-1] = (char*)malloc(strlen(msg));
+	if(admin_str[admin_num-1] == NULL){
+		exit(1);
+	}
+
+	strcpy(admin_str[admin_num-1], msg);
+
+	privmsg(info, "%s is now an admin!\r\n", msg);
+
+	struct MsgInfo *tmpinfothxchris = malloc(sizeof &info);
+
+	memcpy(tmpinfothxchris, info, sizeof &info);
+	tmpinfothxchris->user = msg; // geile const, so geil zum arbeiten >:(
+	privmsg(tmpinfothxchris, "you're now permitted to command me!\r\n", msg);
+
+	free(tmpinfothxchris); // :)
+
+	return 1;
+}
+
+int del_admin(char *msg, const struct MsgInfo *const info)
+{
+	if(admin_num == 1){
+		admin_num =0;
+		free(admin_str);
+		return 1;
+	}
+	if(msg == NULL || !check_for_admin(msg)){
+		privmsg(info, "I dont take commands from that guy anyway!\r\n");
+		return 1;
+	}
+	msg[strlen(msg) -2] = '\0'; // \r\n
+
+	if(strstr(msg, " ") != NULL){
+		privmsg(info, "just write the name after the !admin command without other chars\r\n");
+		return 1;
+	}
+
+	char **tmp_admin_str = malloc((admin_num-1) * sizeof(char *));
+	for(int i,j = 0; i < admin_num; i++){
+		if(strcmp(admin_str[i], msg) != 0){
+			tmp_admin_str[j] = (char *)malloc(strlen(admin_str[i]));
+			if(tmp_admin_str[j] == NULL){
+				exit(1);
+			}
+			strcpy(tmp_admin_str[j], admin_str[i]);
+			j++;
+		}
+		free(admin_str[i]);
+	}
+	free(admin_str);
+	admin_str = tmp_admin_str;
+	admin_num--;	
+	return 1;
+}
+
+int list_admins(char *msg, const struct MsgInfo *const info)
+{
+	struct MsgInfo *tmpinfothxchris = malloc(sizeof &info);
+	memcpy(tmpinfothxchris, info, sizeof &info);
+	tmpinfothxchris->user = NULL; 
+	char admin_cat_str[GLOBAL_BUFSIZE];
+	memset(&admin_cat_str[0], sizeof admin_cat_str, 0);	
+	for(int i = 0; i < admin_num; i++){
+		strcat(admin_cat_str, admin_str[i]);
+		strcat(admin_cat_str, ", ");	
+	}	
+	admin_cat_str[strlen(admin_cat_str)-2] = '\0';
+	privmsg(tmpinfothxchris, "%s\r\n", admin_cat_str);
+	free(tmpinfothxchris); // :)
+	return 1;
+}
+
 void cmd_interpret(char *msg, const struct MsgInfo *const info)
 {
 	int error = 0;
 
 #ifndef NO_ADMIN
-	static const char *admin_user = NULL;
-	if(admin_user != NULL && strcmp(info->user, admin_user) != 0){
+	if(admin_str == NULL){
 		return;
 	}
-	if(strncmp(msg,"!admin",6) == 0){
-		admin_user = strdup(info->user);
-		privmsg(info, "you're admin!\r\n");
+	if(!check_for_admin(info->user)){
+		privmsg(info, "you don't have the permission to do that!\r\n");
 		return;
 	}
 #endif
@@ -292,6 +403,12 @@ void cmd_interpret(char *msg, const struct MsgInfo *const info)
 		error = show_match(msg+6, info);
 	}else if(strncmp(msg, "!list", 5) == 0){
 		error = list_matches(msg+6, info);
+	}else if(strncmp(msg, "!perm", 5) == 0){
+		error = add_admin(msg+6, info);
+	}else if(strncmp(msg, "!unperm", 7) == 0){
+		error = del_admin(msg+8, info);
+	}else if(strncmp(msg, "!commanders", 11) == 0){
+		error = list_admins(msg+12, info);
 	}else if(strncmp(msg, "!dropall", 8) == 0){
 		error = 1;
 		drop_all_matches();
@@ -336,8 +453,6 @@ void find_answer(char *msg, const char *user)
 			greet(msg, user);
 			return;
 		}
-		msg[0] = '\0';
-		return;
 	}
 
 	const char *s = find_match(msg);
@@ -412,8 +527,27 @@ int write_to_file(void)
 	return 0;
 }
 
+void load_admins(){
+	admin_str = (char **)malloc(COUNT_OF(predefined_admins)* sizeof(char *));
+	if(admin_str == NULL){
+		exit(1);
+	}
+	for(int i = 0; i < COUNT_OF(predefined_admins); i++){
+		admin_str[i] = (char *)malloc(strlen(predefined_admins[i]));
+		if(admin_str[i] == NULL){
+			exit(1);
+		}
+		strcpy(admin_str[i], predefined_admins[i]);
+		admin_num++;
+	}
+}
+
 int main(int argc, char* argv[])
 {
+	if(atexit(free_resources) != 0){
+		exit(1);
+	}
+
 	const int signals[] = {SIGINT, SIGTERM};
 	struct sigaction s;
 	s.sa_handler = signal_handler;
@@ -442,13 +576,13 @@ int main(int argc, char* argv[])
 		.user = NULL
 	};
 
-
 	matchlist.size = 4096;
 	matchlist.used = 0;
 	matchlist.m_buf = calloc(sizeof(struct Match), matchlist.size);
 	assert(matchlist.m_buf != NULL);
 
 	load_from_file();
+	load_admins();
 
 	memset(&hints, 0, sizeof hints);
 	hints.ai_family = AF_INET;
