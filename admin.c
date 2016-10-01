@@ -75,6 +75,9 @@ int del_admin(char *msg, const struct MsgInfo *const info)
 	char *name = skip_whitespace(msg);
 	cut_token(name);
 
+	if(name[0] == '\0'){
+		return 0;
+	}
 	if(!is_admin(name)){
 		privmsg(info, "I dont take commands from that guy anyway!\r\n");
 		return 1;
