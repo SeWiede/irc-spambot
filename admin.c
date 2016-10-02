@@ -94,7 +94,7 @@ int del_admin(char *msg, const struct MsgInfo *const info)
 	int pos = find_admin_str_pos(name);
 	assert(pos >= 0); /* we checked that some lines above with is_admin */
 
-
+	free(admin_str[pos]);
 	memmove(&admin_str[pos], &admin_str[pos+1], sizeof(char*)*(admin_num - pos - 1));
 	admin_str = (char**) realloc(admin_str, (--admin_num) * sizeof(char*));
 	if(admin_str == NULL){
