@@ -492,11 +492,12 @@ int main(int argc, char* argv[])
 	printf("checking arguments for connection: ...\n");
 	while(1){
 		static struct option opts[] = {
-			{"twitch", no_argument, 0, 't'} //, ...
+			{"twitch", no_argument, 0, 't'}, //, ...
+			{0,0,0,0}
 			//...
 		};
 		int opt_index =0;
-		char c = getopt_long(argc, argv, "t", opts, &opt_index);
+		signed char c = getopt_long(argc, argv, "t", opts, &opt_index);
 		if(c==-1)
 			break;
 		switch(c) {
