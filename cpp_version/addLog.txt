@@ -1,0 +1,8 @@
+!add <say hello!> <hello streamer! :D>
+!add <good boy!> <RalpherZ>
+!add <wish him good luck!> <gl on kq pet m8!>
+!add <gn8 hf streaming^^> <cya gl/hf>
+!add <test> <test>
+!add <test> <test>
+!add <test> <test>
+!add <test> <test>
