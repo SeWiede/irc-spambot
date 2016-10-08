@@ -3,7 +3,7 @@ CC = gcc
 DEFS = -D_XOPEN_SOURCE=500 -D_BSD_SOURCE
 CFLAGS = -Wall -g -std=c99 -pedantic $(DEFS)
 LDFLAGS =
-OBJECTFILES = bot.o admin.o
+OBJECTFILES = bot.o admin.o match.o
 EXECS = bot 
 .PHONY: all clean
 
