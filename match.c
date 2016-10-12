@@ -3,6 +3,7 @@
 #include "match.h"
 
 #include <assert.h>
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -41,7 +42,7 @@ static struct Match* alloc_match(const char *keyw)
 	return m;
 }
 
-int add_match(char *msg, const struct MsgInfo *const info)
+int match_add(char *msg, const struct MsgInfo *const info)
 {
 	char *keyw = strstr(msg, "<");
 	if(keyw == NULL) return 0;
@@ -85,7 +86,7 @@ static void remove_match(struct Match *m)
 	matchlist.used--;
 }
 
-int del_match(char *msg, const struct MsgInfo *const info)
+int match_del(char *msg, const struct MsgInfo *const info)
 {
 	char *keyw = strstr(msg, "<");
 	if(keyw == NULL) return 0;
@@ -130,7 +131,7 @@ int del_match(char *msg, const struct MsgInfo *const info)
 	return 1;
 }
 
-void drop_all_matches(void)
+void match_dropall(void)
 {
 	struct Match *m;
 	size_t i,j;
@@ -146,7 +147,7 @@ void drop_all_matches(void)
 	matchlist.size = matchlist.used = 0;
 }
 
-int show_match(char *msg, const struct MsgInfo *const info)
+int match_show(char *msg, const struct MsgInfo *const info)
 {
 	const char *keyw = strstr(msg, "<");
 	struct Match *m;
@@ -170,7 +171,7 @@ int show_match(char *msg, const struct MsgInfo *const info)
 	return 1;
 }
 
-int list_matches(char *msg, const struct MsgInfo *const info)
+int match_list(char *msg, const struct MsgInfo *const info)
 {
 	struct Match *m;
 	size_t i;
@@ -184,7 +185,7 @@ int list_matches(char *msg, const struct MsgInfo *const info)
 	return 1;
 }
 
-const char* find_match(const char *msg)
+const char* match_find(const char *msg)
 {
 	size_t i;
 	for(i = 0; i < matchlist.used; i++){
@@ -195,5 +196,54 @@ const char* find_match(const char *msg)
 		}
 	}
 	return NULL;
+}
+
+int match_writefile(const char *filename)
+{
+	FILE *file;
+	int i,j;
+
+	if(filename == NULL){
+		return 0;
+	}
+	if( (file = fopen(filename, "w")) == NULL){
+		return 0;
+	}
+	for(i=0; i < matchlist.used; i++){
+		const struct Match *m = &matchlist.m_buf[i];
+		for(j = 0 ;j < m->used ;j++){
+			fprintf(file, "!add <%s> <%s>\n", m->keyw, m->react[j]);
+		}
+	}
+	fclose(file);
+	return 1;
+}
+
+int match_readfile(const char *filename)
+{
+	FILE *file;
+	char line[GLOBAL_BUFSIZE];
+	int errorcode = 1;
+
+	if(filename == NULL || (file = fopen(filename , "r")) == NULL){
+		return 0;
+	}
+
+	while(fgets(line, GLOBAL_BUFSIZE, file) != NULL){
+
+		char *nl = strchr(line, '\n');
+		if(nl != NULL){
+			*nl = '\0';
+		}
+
+		if(strncmp(line, "!add", 4) == 0){
+			match_add(line, NULL);
+		}else if(line[0] == '!'){
+			errorcode = 0;
+			break;
+		}
+	}
+	fclose(file);
+	return errorcode;
 }
 

@@ -24,7 +24,7 @@ static int find_admin_str_pos(const char *name)
 	return -1;
 }
 
-int add_admin(char *msg, const struct MsgInfo *const info)
+int admin_add(char *msg, const struct MsgInfo *const info)
 {
 	char *name = skip_whitespace(msg);
 	cut_token(name);
@@ -55,7 +55,7 @@ int add_admin(char *msg, const struct MsgInfo *const info)
 	return 1;
 }
 
-int list_admins(char *msg, const struct MsgInfo *const info)
+int admin_list(char *msg, const struct MsgInfo *const info)
 {
 	struct MsgInfo tmpinfo = *info;
 	char admin_cat_str[GLOBAL_BUFSIZE];
@@ -70,7 +70,7 @@ int list_admins(char *msg, const struct MsgInfo *const info)
 	return 1;
 }
 
-int del_admin(char *msg, const struct MsgInfo *const info)
+int admin_del(char *msg, const struct MsgInfo *const info)
 {
 	char *name = skip_whitespace(msg);
 	cut_token(name);
@@ -103,16 +103,11 @@ int del_admin(char *msg, const struct MsgInfo *const info)
 	return 1;
 }
 
-int count_admins()
-{
-	return admin_num;
-}
-
 int is_admin(const char *name){
 	return find_admin_str_pos(name) >= 0;
 }
 
-void free_adminlist()
+void admin_uninit(void)
 {
 	if(admin_str != NULL){
 		for(int i = 0; i < admin_num; i++){
@@ -122,7 +117,7 @@ void free_adminlist()
 	}
 }
 
-void load_admins(){
+void admin_init(void){
 	admin_str = (char **)malloc(COUNT_OF(predefined_admins)* sizeof(char *));
 	if(admin_str == NULL){
 		exit(1);
@@ -138,15 +133,15 @@ void load_admins(){
 
 #else /* ifdef NO_ADMIN */
 
-int add_admin(char *msg, const struct MsgInfo *const info)
+int admin_add(char *msg, const struct MsgInfo *const info)
 {
 	return 1;
 }
-int del_admin(char *msg, const struct MsgInfo *const info)
+int admin_del(char *msg, const struct MsgInfo *const info)
 {
 	return 1;
 }
-int list_admins(char *msg, const struct MsgInfo *const info)
+int admin_list(char *msg, const struct MsgInfo *const info)
 {
 	return 1;
 }
@@ -154,10 +149,10 @@ int is_admin(const char *name)
 {
 	return 1;
 }
-void free_adminlist()
+void admin_uninit(void)
 {
 }
-void load_admins()
+void admin_init(void)
 {
 }
 

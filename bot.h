@@ -1,9 +1,15 @@
 #pragma once
 #include <stdarg.h>
 
-#define COUNT_OF(x) (sizeof(x)/sizeof(x[0]))
 #define GLOBAL_BUFSIZE (512)
 
+#define COUNT_OF(x) (sizeof(x)/sizeof(x[0]))
+#define FORCE_ASSERT(X)	do{ \
+				if(!(X)){ \
+					fprintf(stderr,"FORCE_ASSERT at line %d failed\nAborting...\n",__LINE__); \
+					abort(); \
+				} \
+			}while(0)
 struct MsgInfo{
 	const char *channel;
 	const char *user;

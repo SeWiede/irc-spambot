@@ -41,7 +41,7 @@ char* skip_whitespace(char *s)
 }
 
 void free_resources(void){
-	free_adminlist();
+	admin_uninit();
 	if(matchlist.m_buf != NULL){
 		free(matchlist.m_buf);
 	}
@@ -102,22 +102,22 @@ void cmd_interpret(char *msg, const struct MsgInfo *const info)
 	}
 
 	if(strncmp(msg, "!add", 4) == 0){
-		error = add_match(msg+5, info);
+		error = match_add(msg+5, info);
 	}else if(strncmp(msg, "!del", 4) == 0){
-		error = del_match(msg+5, info);
+		error = match_del(msg+5, info);
 	}else if(strncmp(msg, "!show", 5) == 0){
-		error = show_match(msg+6, info);
+		error = match_show(msg+6, info);
 	}else if(strncmp(msg, "!list", 5) == 0){
-		error = list_matches(msg+6, info);
+		error = match_list(msg+6, info);
 	}else if(strncmp(msg, "!perm", 5) == 0){
-		error = add_admin(msg+6, info);
+		error = admin_add(msg+6, info);
 	}else if(strncmp(msg, "!unperm", 7) == 0){
-		error = del_admin(msg+8, info);
+		error = admin_del(msg+8, info);
 	}else if(strncmp(msg, "!commanders", 11) == 0){
-		error = list_admins(msg+12, info);
+		error = admin_list(msg+12, info);
 	}else if(strncmp(msg, "!dropall", 8) == 0){
 		error = 1;
-		drop_all_matches();
+		match_dropall();
 		privmsg(info, "dropped everything\r\n");
 	}
 
@@ -129,7 +129,7 @@ void cmd_interpret(char *msg, const struct MsgInfo *const info)
 const char* rand_msg_starter()
 {
 	const char *s;
-	if((s = find_match(""))){
+	if((s = match_find(""))){
 		return s;
 	}else{
 		return NULL;
@@ -161,76 +161,13 @@ void find_answer(char *msg, const char *user)
 		}
 	}
 
-	const char *s = find_match(msg);
+	const char *s = match_find(msg);
 	if(s != NULL){
 		strcpy(msg, s);
 		return;
 	}
 	
 	msg[0] = '\0';
-}
-
-void load_from_file(void)
-{
-	FILE *file;
-	char line[GLOBAL_BUFSIZE];
-	int lastpos;
-
-	if(addLog == NULL){
-		return;
-	}
-	if( (file = fopen(addLog, "r")) == NULL){
-		printf("error opening File %s\n", addLog);
-		return;
-	}
-	while(fgets(line, GLOBAL_BUFSIZE, file) != NULL){
-
-		line[GLOBAL_BUFSIZE-1] = '\0';
-		lastpos = strlen(line)-1;
-
-		if(line[lastpos] == '\n' || line[lastpos] == '\0')
-			line[lastpos] = '\0';
-		else{
-			printf("come on you shit! I dont want to deal with that - file ignored!\n");
-			file = NULL;
-			break;
-		}
-		
-		if(strncmp(line, "!add", 4) == 0){
-			if(add_match(line, NULL)){
-				printf("%s successfully added to commands\n", line);
-			}else{
-				printf("error while adding %s to commands\n", line);
-			}
-		}else if(line[0] == '!'){
-			printf("invalid file format!\n");
-			break;
-		}
-	}
-	fclose(file);
-}
-
-int write_to_file(void)
-{
-	FILE *file;
-	int i,j;
-
-	if(addLog == NULL){
-		return 0;
-	}
-	printf("saving used commands in file %s\n", addLog);
-	if( (file = fopen(addLog, "w")) == NULL){
-		printf("could not open file %s for writing\n", addLog);
-		return 1;
-	}
-	for(i=0; i < matchlist.used; i++){
-		const struct Match *m = &matchlist.m_buf[i];
-		for(j = 0 ;j < m->used ;j++){
-			fprintf(file, "!add <%s> <%s>\n", m->keyw, m->react[j]);
-		}	
-	}
-	fclose(file);
-	return 0;
 }
 
 void setup_signalhandler(void)
@@ -242,15 +179,51 @@ void setup_signalhandler(void)
 	s.sa_flags = 0;
 
 	if(sigfillset(&s.sa_mask) < 0){
-		printf("error sigfillset\n");
 		exit(1);
 	}
 	for(i=0; i < COUNT_OF(signals); i++){
 		if(sigaction(signals[i], &s, NULL) < 0){
-			printf("error sigaction!\n");
 			exit(1);
 		}
 	}	
+}
+
+void parse_cmd_args(int argc, char **argv)
+{
+	while(1){
+		static struct option opts[] = {
+			{"twitch", no_argument, 0, 't'},
+			{"host", required_argument, 0, 'h'},
+			{"port", required_argument, 0, 'p'},
+			{"channel", required_argument, 0, 'c'},
+			{"nick", required_argument, 0, 'n'},
+			{0,0,0,0}
+			//...
+		};
+		int opt_index =0;
+		int c = getopt_long(argc, argv, "t", opts, &opt_index);
+		if(c==-1)
+			break;
+		switch(c) {
+		case 't':
+			twitch =1;
+			break;
+		case 'h':
+			host = optarg;
+			break;
+		case 'p':
+			port = optarg;
+			break;
+		case 'c':
+			channel = optarg;
+			break;
+		case 'n':
+			nick = optarg;
+			break;
+		default:
+			break;
+		}
+	}
 }
 
 int main(int argc, char* argv[])
@@ -276,38 +249,24 @@ int main(int argc, char* argv[])
 	matchlist.m_buf = calloc(sizeof(struct Match), matchlist.size);
 	assert(matchlist.m_buf != NULL);
 
-	load_from_file();
-	load_admins();
+	match_readfile(addLog);
+	admin_init();
+	parse_cmd_args(argc, argv);
 
+	printf("connecting to %s:%s ...\n", host, port);
 	memset(&hints, 0, sizeof hints);
 	hints.ai_family = AF_INET;
 	hints.ai_socktype = SOCK_STREAM;
-	printf("getting data from: %s port %s\n", host, port);
 	getaddrinfo(host, port, &hints, &res);
-	printf("creating socket....\n");
+
 	conn = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-	printf("connecting...\n");
-	connect(conn, res->ai_addr, res->ai_addrlen);
-	printf("done!\n");
-	printf("checking arguments for connection: ...\n");
-	while(1){
-		static struct option opts[] = {
-			{"twitch", no_argument, 0, 't'},
-			{0,0,0,0}
-			//...
-		};
-		int opt_index =0;
-		int c = getopt_long(argc, argv, "t", opts, &opt_index);
-		if(c==-1)
-			break;
-		switch(c) {
-		case 't':
-			twitch =1;	
-			break;
-		default:
-			break;
-		}
+	FORCE_ASSERT(conn != -1);
+
+	if(connect(conn, res->ai_addr, res->ai_addrlen) != 0){
+		printf("could not connect to server!\n");
+		exit(0);
 	}
+
 
 	if(twitch){
 		printf("twitch was chosen!\n");
@@ -401,7 +360,10 @@ int main(int argc, char* argv[])
 		}
 
 	}
-	int error_code = write_to_file();
+	printf("saving used commands in file %s\n", addLog);
+	if(match_writefile(addLog) == 0){
+		printf("could not write to file.\n");
+	}
 	printf("BYE :) \n");
-	return error_code;
+	return 0;
 }

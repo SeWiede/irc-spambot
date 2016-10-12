@@ -15,10 +15,12 @@ extern struct MatchList{
 	size_t used, size;
 } matchlist;
 
-int add_match(char *msg, const struct MsgInfo *const info);
-int del_match(char *msg, const struct MsgInfo *const info);
-int show_match(char *msg, const struct MsgInfo *const info);
-int list_matches(char *msg, const struct MsgInfo *const info);
-void drop_all_matches(void);
-const char* find_match(const char *msg);
+int match_add(char *msg, const struct MsgInfo *const info);
+int match_del(char *msg, const struct MsgInfo *const info);
+int match_show(char *msg, const struct MsgInfo *const info);
+int match_list(char *msg, const struct MsgInfo *const info);
+void match_dropall(void);
+const char* match_find(const char *msg);
+int match_readfile(const char *filename);
+int match_writefile(const char *filename);
 
