@@ -8,52 +8,62 @@
 #define IRCBOT_H_
 
 #include <stdarg.h>
-
+#include <string>
+#include "Match.h"
+#include "Admins.h"
 
 using namespace std;
+
 struct MsgInfo{
-	const char *channel;
-	const char *user;
+	string channel;
+	string user;
 };
  
 class IrcBot
 {
 public:
-    IrcBot(char *_nick, char *_usr, char *_host, char *_channel, bool _twitch);
+    IrcBot(string _nick, string _usr, string _host, string _channel, bool _twitch);
+	IrcBot(string _nick, string _usr, string _host, string _channel, bool _twitch,
+		const string predef_ads[]);
     virtual ~IrcBot();
- 
-    bool setup;
  
     void start();
     bool charSearch(char *toSearch, char *searchFor);
  
 private:
-	char *host;
-    char *port;
-	char *channel;	
-	int conn;
- 
-    char *nick;
-    char *usr;
-	
+	string host;
+    string port;
+	string channel;	 
+    string nick;
+    string usr;
 	bool twitch; 
 
-    bool isConnected(char *buf);
-    char * timeNow();
-	void raw(char const *fmt, ...);
-	void vraw(char const *fmt, va_list ap);
-	void privmsg(const struct MsgInfo *const info, const char *fmt, ...);
+	int conn;
 
-	void find_answer(char *msg, const char *user);
-	void greet(char *msg, const char *user);
-	const char* find_match(const char *msg);
+
+    string timeNow();
+	void raw(string send);
+	void privmsg(const struct MsgInfo *const info, string msg);
+
+	void find_answer(string& msg, const string user);
+	void greet(string& msg, const string user);
+	const string find_match(const string msg);
 
 	void load_from_file(void);
-	int write_to_file(void);
+	bool write_to_file(void);
 
 	struct Match* alloc_match(const char *keyw);
-	int add_match(char *msg, const struct MsgInfo *const info);
-	struct Match* get_match(const char *keyw);
+	int add_match(string msg, const struct MsgInfo *const info);
+	bool add_match_helper(const string keyw, const string react);
+
+	int del_match(string& msg);
+	bool del_match_helper(const string keyw, const string react);
+
+	void drop_all_matches();
+
+	int get_matchindex(const string keyw);
+
+	void cmd_interpret(string& msg, const struct MsgInfo *const info);
 };
  
 #endif /* IRCBOT_H_ */

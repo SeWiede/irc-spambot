@@ -1,4 +1,4 @@
 #pragma once
 
-static const char *auth = "your authentication";
-static const char *addLog = "addLog.txt";
+const string auth = "your authentication";
+const string addLog = "addLog.txt";
