@@ -24,7 +24,7 @@ class IrcBot
 public:
     IrcBot(string _nick, string _usr, string _host, string _channel, bool _twitch);
 	IrcBot(string _nick, string _usr, string _host, string _channel, bool _twitch,
-		const string predef_ads[]);
+		string predef_ads[]);
     virtual ~IrcBot();
  
     void start();
@@ -45,23 +45,22 @@ private:
 	void raw(string send);
 	void privmsg(const struct MsgInfo *const info, string msg);
 
-	void find_answer(string& msg, const string user);
-	void greet(string& msg, const string user);
-	const string find_match(const string msg);
+	void find_answer(string& msg, string user);
+	void greet(string& msg, string user);
+	string find_match(string msg);
 
 	void load_from_file(void);
 	bool write_to_file(void);
 
-	struct Match* alloc_match(const char *keyw);
 	int add_match(string msg, const struct MsgInfo *const info);
-	bool add_match_helper(const string keyw, const string react);
+	bool add_match_helper(string keyw, string react);
 
 	int del_match(string& msg);
-	bool del_match_helper(const string keyw, const string react);
+	bool del_match_helper(string keyw, string react);
 
 	void drop_all_matches();
 
-	int get_matchindex(const string keyw);
+	int get_matchindex(string keyw);
 
 	void cmd_interpret(string& msg, const struct MsgInfo *const info);
 };

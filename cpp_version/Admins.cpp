@@ -7,7 +7,7 @@ Admins::Admins(){
 Admins::Admins(vector<string> _admins){
 	admins = _admins;
 }
-Admins::Admins(const string predef_ads[]){
+Admins::Admins(string predef_ads[]){
 	admins = vector<string>(predef_ads, predef_ads + sizeof(predef_ads) / sizeof(predef_ads[0]));	
 }
 
@@ -46,7 +46,7 @@ bool Admins::del_admin(string& msg){
 		return false;
 	}
 	
-	admins.erase(remove(admins.begin(), admins.end(), name), admins.end());
+	admins.erase(remove(admins.begin(), admins.end(), name));
 	
 	msg = name + " is now no admin anymore!";
 	cout << msg << endl;
@@ -61,7 +61,7 @@ void Admins::list_admins(string& msg){
 	msg = msg.substr(0, msg.length()-2);
 }
 
-bool Admins::is_admin(const string name){
+bool Admins::is_admin(string name){
 	return !admins.empty() && (find(admins.begin(), admins.end(), name) != admins.end());
 }
 

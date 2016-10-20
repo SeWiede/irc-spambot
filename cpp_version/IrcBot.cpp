@@ -53,7 +53,7 @@ IrcBot::IrcBot(string _nick, string _usr, string _host, string _channel, bool _t
 }
 
 IrcBot::IrcBot(string _nick, string _usr, string _host, string _channel, bool _twitch,
-				const string predef_ads[])
+				string predef_ads[])
 {
     nick = _nick;
     usr = _usr;
@@ -75,7 +75,7 @@ void str_lower(char *str){
 	}
 }
  
-const string IrcBot::find_match(const string msg)
+string IrcBot::find_match(string msg)
 {
 	for(Match m : matchlist){
 		if(msg.find(m.get_keyw()) != string::npos){
@@ -85,7 +85,7 @@ const string IrcBot::find_match(const string msg)
 	return string();
 }
 
-void IrcBot::greet(string& msg, const string user)
+void IrcBot::greet(string& msg, string user)
 {
 	msg = "Greetings";
 	if(!user.empty()){
@@ -93,7 +93,7 @@ void IrcBot::greet(string& msg, const string user)
 	}
 }
 
-void IrcBot::find_answer(string& msg, const string user)
+void IrcBot::find_answer(string& msg, string user)
 {
 	if(msg.find("hello ") != string::npos || msg.find("hi ") != string::npos 
 	|| msg.find("hey ") != string::npos){
@@ -103,7 +103,7 @@ void IrcBot::find_answer(string& msg, const string user)
 		}
 	}
 
-	const string s = find_match(msg.c_str());
+	string s = find_match(msg.c_str());
 	if(!s.empty()){
 		msg = s;
 		return;
@@ -181,7 +181,7 @@ bool IrcBot::write_to_file(void)
 	return 0;
 }
 
-int IrcBot::get_matchindex(const string keyw)
+int IrcBot::get_matchindex(string keyw)
 {	
 	std::vector<Match>::iterator it = matchlist.begin();
 	for(uint8_t i=0; i < matchlist.size(); i++, ++it){
@@ -192,7 +192,7 @@ int IrcBot::get_matchindex(const string keyw)
 	return -1;
 }
 
-bool IrcBot::add_match_helper(const string keyw, const string react){
+bool IrcBot::add_match_helper(string keyw, string react){
 	int i = get_matchindex(keyw);
 	if(i == -1){
 		Match *m = new Match(keyw);
@@ -234,7 +234,7 @@ int IrcBot::add_match(string msg, const struct MsgInfo *const info)
 	return 1;
 }
 
-bool IrcBot::del_match_helper(const string keyw, const string react){
+bool IrcBot::del_match_helper(string keyw, string react){
 	int i = get_matchindex(keyw);
 	if(i == -1){
 		return false;

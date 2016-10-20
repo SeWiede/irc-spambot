@@ -33,7 +33,7 @@ bool Match::add_react(const std::string _react)
 }
 
 bool Match::del_react(std::string _react){
-	react_vect.erase(remove(react_vect.begin(), react_vect.end(), _react), react_vect.end());
+	react_vect.erase(remove(react_vect.begin(), react_vect.end(), _react));
 	if (react_vect.size() == 0)
 		empty = true;
 	return true;

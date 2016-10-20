@@ -13,12 +13,12 @@ class Admins
 public:
 	Admins();
 	Admins(vector<string> _admins);
-	Admins(const string predefined_admins[]); 
+	Admins(string predefined_admins[]); 
  	virtual ~Admins();
 	bool add_admin(string& msg);
 	bool del_admin(string& msg);
 	void list_admins(string& msg);
-	bool is_admin(const string name);
+	bool is_admin(string name);
 	void load_admins(vector<string> a);
 	void load_admins(string a[]);
 	int count_admins();
